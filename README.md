@@ -1,0 +1,213 @@
+# 猜猜我是谁 — 业务流程说明书
+
+## 一、游戏概述
+
+"猜猜我是谁"是一款基于问答推理的互动游戏。由 AI Agent（主持人）在心里选定一个人物（如曹操），玩家通过向 Agent 提问收集线索，最终猜出该人物身份。玩家最多拥有 **10 次提问机会**。
+
+## 二、角色定义
+
+| 角色 | 职责 |
+|---|---|
+| Agent（主持人） | 持有秘密人物身份；回答玩家提问；验证玩家猜测；判定胜负 |
+| 玩家 | 提出判断性问题、根据线索猜测人物身份 |
+
+## 三、核心规则
+
+1. **提问次数**：玩家最多可提问 **10 次**。
+2. **提问类型**：玩家提问需为可由"是/不是"明确作答的判断性问题（如"是男性吗？""是三国时期的人物吗？"）。
+3. **回答形式**：Agent 对每个问题必须给出**肯定/明确的二元答复**——"是"或"不是"，不得含糊或拒绝。
+4. **猜测时机**：每次提问并获答复后，玩家可选择**立即猜测**或**继续提问**。
+5. **猜测判定**：
+   - 正确 → Agent 给出肯定答复，游戏**胜利结束**。
+   - 错误 → Agent 提示"猜测错误，请继续提问后再尝试"，游戏继续。
+6. **结束条件**：详见第五节。
+
+## 四、业务流程
+
+### 4.1 主流程
+
+**① 初始化**
+- Agent 选定（或随机抽取）目标人物，对玩家保密。
+- 初始化计数器：`已提问次数 = 0`，上限 = 10。
+- 宣布游戏开始及规则（10 次提问、需判断性问题等）。
+
+**② 提问—回答循环**（循环条件：`已提问次数 < 10` 且 未胜利）
+- 玩家提出一个判断性问题。
+- Agent 判定后回答"是"或"不是"。
+- `已提问次数 += 1`，并告知剩余次数。
+- 进入"猜测判定"子流程。
+
+**③ 猜测判定**（可选）
+- 玩家选择猜测 或 跳过。
+  - **跳过** → 返回 ② 继续提问。
+  - **猜测** → Agent 验证：
+    - 正确 → 胜利，游戏结束。
+    - 错误 → 提示继续提问后尝试，返回 ②。
+
+### 4.2 流程图（文字版）
+
+```
+开始
+  ↓
+Agent 选定人物 / 初始化计数器
+  ↓
+[循环] ←──────────────────────────┐
+  ↓                                │
+玩家提问                            │
+  ↓                                │
+Agent 回答 是/不是                  │
+  ↓                                │
+提问次数 +1 / 提示剩余次数          │
+  ↓                                │
+玩家是否猜测？ ── 否 ──────┐        │
+  ↓ 是                     │        │
+猜测正确？ ── 否 ──────────┴────────┘
+  ↓ 是
+胜利结束
+
+（若次数达上限且未猜中）→ 失败结束 / 揭晓答案
+```
+
+## 五、结束条件与结果
+
+| 触发条件 | 结果 | Agent 行为 |
+|---|---|---|
+| 玩家猜测正确 | **胜利** | 肯定答复，可附简短人物介绍 |
+| 10 次提问用尽且仍未猜中 | **失败** | 揭晓答案，鼓励再来一局 |
+| 玩家主动放弃 | **中止** | 揭晓答案 |
+
+## 六、关键状态
+
+- `目标人物`：Agent 持有，玩家不可见。
+- `已提问次数`：0 → 10。
+- `剩余提问次数`：10 − 已提问次数。
+- `游戏状态`：进行中 / 已胜利 / 已失败 / 已中止。
+
+
+
+## 八、交互示例（参考剧本）
+
+**正常对局：**
+```
+Agent: 游戏开始！我心里想了一位中国历史人物。你有 10 次提问机会，
+       问题需能用"是/不是"回答。请提问或直接猜测。
+
+玩家: 这个人是男性吗？
+Agent: 是。剩余提问次数：9。可继续提问或猜测。
+
+
+
+玩家: 我猜是曹操。
+Agent: 恭喜你，答对了！就是曹操（字孟德，东汉末年杰出的政治家、
+       军事家、文学家）。游戏胜利！
+```
+
+**猜测错误：**
+```
+玩家: 我猜是诸葛亮。
+Agent: 猜测错误，请继续提问后再尝试。剩余提问次数：8。
+```
+
+## 九、项目启动指南
+
+项目包含两种运行形态：**Web 版（前端 + 后端）** 与 **CLI 命令行版**。Web 版需同时启动后端（FastAPI）和前端（Vite）。
+
+### 9.1 环境要求
+
+| 依赖 | 版本要求 | 用途 |
+|---|---|---|
+| Python | 3.10 及以上（已在 3.14 验证） | FastAPI 后端 / CLI |
+| Node.js | 18 及以上（含 npm） | Vue3 前端 |
+
+### 9.2 配置 LLM（必做）
+
+后端基于 **LangChain 1.0**（`create_agent`），通过标准工厂 `init_chat_model` 接入模型，支持 Anthropic / OpenAI 兼容端点 / DeepSeek 三类提供商。
+
+在**项目根目录**（`guess-who-i-am/.env`，与 `backend/`、`frontend/` 平级；可直接复制 `.env.example` 改名为 `.env`）配置 `.env`，用 `LLM_PROVIDER` 选择提供商，用 `MODEL_ID` 指定模型：
+
+```ini
+# 方案 A：Anthropic 官方（默认）
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-你的真实密钥
+MODEL_ID=claude-sonnet-4-6
+
+# 方案 B：国内 Anthropic 兼容端点（如智谱 GLM / Kimi 等）
+# LLM_PROVIDER=anthropic
+# ANTHROPIC_API_KEY=你的密钥
+# MODEL_ID=对应模型名
+# ANTHROPIC_BASE_URL=https://你的兼容端点地址
+
+# 方案 C：OpenAI 官方或 OpenAI 兼容端点（DeepSeek / Kimi / 智谱等）
+# LLM_PROVIDER=openai
+# OPENAI_API_KEY=你的密钥
+# OPENAI_BASE_URL=https://api.deepseek.com/v1
+# MODEL_ID=deepseek-chat
+
+# 方案 D：DeepSeek 官方集成（langchain-deepseek，默认关闭 thinking）
+# LLM_PROVIDER=deepseek
+# DEEPSEEK_API_KEY=你的密钥
+# DEEPSEEK_BASE_URL=https://api.deepseek.com
+# MODEL_ID=deepseek-flash
+```
+
+> 注意：
+> - 不配置 `LLM_PROVIDER` 时默认走 `anthropic`；占位符 `sk-ant-xxx` 会导致 403 PermissionDeniedError，必须替换为真实密钥。
+> - 切提供商后需**重启后端 / CLI** 生效；游戏的工具调用（function calling）依赖模型侧支持，建议优先使用官方集成（方案 A / D）。
+> - DeepSeek 方案默认传 `extra_body={"thinking": {"type": "disabled"}}` 关闭思考，保证二元问答与工具判定稳定。
+
+### 9.3 启动 Web 版（推荐）
+
+需要开**两个终端**，分别启动后端与前端。
+
+**终端 1 — 启动后端（工作目录必须是 `guess-who-i-am/`）：**
+
+```powershell
+cd guess-who-i-am
+pip install -r backend/requirements.txt
+python -m uvicorn backend.app.main:app --reload --port 8000
+```
+
+- 后端地址：http://localhost:8000
+- 健康检查：http://localhost:8000/healthz（返回 `{"status":"ok"}` 即正常）
+- 接口文档：http://localhost:8000/docs
+
+**终端 2 — 启动前端：**
+
+```powershell
+cd guess-who-i-am/frontend
+npm install
+npm run dev
+```
+
+- 浏览器打开：http://localhost:5173
+- 前端通过 Vite 代理把 `/api` 请求转发到 `http://localhost:8000`，无需额外配置。
+
+> Windows PowerShell 提示"无法加载 npm.ps1，因为在此系统上禁止运行脚本"时，把 `npm` 换成 `npm.cmd` 即可（如 `npm.cmd install`、`npm.cmd run dev`）。
+
+### 9.4 启动 CLI 版（可选）
+
+在**项目根目录**直接运行（CLI 与 Web 共用同一套 LangChain 后端依赖）：
+
+```powershell
+pip install -r backend/requirements.txt
+python code.py
+```
+
+输入 `quit` / `q` / `放弃` / `exit` 可中止游戏。
+
+### 9.5 常见问题
+
+| 现象 | 原因与处理 |
+|---|---|
+| 开始游戏报 401/403（PermissionDenied/AuthenticationError） | `.env` 中是占位符密钥或密钥无效；确认 `LLM_PROVIDER` 与对应密钥变量（`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`DEEPSEEK_API_KEY`）匹配，替换真实密钥后重启后端 |
+| 报 `ModuleNotFoundError: langchain` / `langchain_deepseek` | 依赖未安装或装在了别的 Python 环境，在项目根目录重新执行 `pip install -r backend/requirements.txt`；可用 `python -c "import langchain; print(langchain.__version__)"` 自检（需为 1.x） |
+| 主持人开局后一直只说开场白、不进入提问 | 多为模型工具调用不稳定：换用官方集成（`LLM_PROVIDER=anthropic` 或 `deepseek`），并确认 `MODEL_ID` 是支持 function calling 的模型 |
+| 前端页面可打开但请求失败 | 后端未启动，或工作目录不是 `guess-who-i-am/`（会导致模块导入失败） |
+| 端口被占用 | 后端改 `--port 8001`（需同步改 `frontend/vite.config.ts` 代理目标），或前端 `npm run dev -- --port 5174` |
+| 会话提示已过期 | 会话仅存内存，空闲 30 分钟或游戏结束后自动释放，点「再玩一次」开新局即可 |
+| 连续两局选中同一个人物 | 正常情况下不会：系统把最近 10 局人物记录在 `data/recent_persons.json`，开局自动排除（含别名）；删除该文件可清空去重记忆 |
+
+---
+
+## 🙏 致谢
+- [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) 
