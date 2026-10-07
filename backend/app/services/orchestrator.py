@@ -54,8 +54,8 @@ _RESULT_META = {
     ResultType.ABORTED: ("游戏已中止", "游戏已中止。"),
 }
 
-NOT_YES_NO_FALLBACK = "请重新提问，不是判断题，不能用『是』或『否』回答。"
-INVALID_GUESS_FALLBACK = "请直接告诉我你猜测的人物名称。"
+NOT_YES_NO_FALLBACK = "主持人刚才没能处理你的问题，请再问一次能用『是』或『否』回答的问题。"
+INVALID_GUESS_FALLBACK = "主持人刚才没能处理你的猜测，请再告诉我一次你猜测的人物名称。"
 
 
 def _last_entry_is_user_prompt(entry: SessionEntry, prefix: str) -> bool:

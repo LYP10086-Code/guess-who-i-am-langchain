@@ -18,6 +18,7 @@ guess-who-i-am / code.py - 猜猜我是谁 CLI（v3 薄封装）
 
 import os
 import sys
+from pprint import pprint
 
 # 让 `python geuss_who_i_am/code.py` 也能导入同目录模块与 backend 包
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -166,6 +167,10 @@ def main():
         host_text = run_agent_loop(session, messages, system_prompt=system_prompt)
         if host_text:
             print(host_text)
+        elif not get_session().is_terminal:
+            # Agent 撞迭代上限（死循环/屡次调错工具）时 run_agent_loop 返回 None：
+            # 游戏未结束就给中性重试提示，不扣次数；终局时交由下一轮循环处理
+            print("主持人刚才没能处理你的输入，请再试一次。")
         print()
 
 

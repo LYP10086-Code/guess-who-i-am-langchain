@@ -171,8 +171,10 @@ def run_agent_loop(
                 config={"recursion_limit": recursion_limit},
             )
         except GraphRecursionError:
-            # 等价旧版"跑满 max_iterations 轮后返回最后文本"
-            return _last_ai_text(messages)
+            # 跑满 max_iterations 仍未完成合法工具调用（死循环/屡次调错）：
+            # 不回写图内消息、绝不用上一轮旧文本冒充本轮回复；
+            # 返回 None，由编排层给出语义正确的中性重试提示（422，不扣次数）
+            return None
         except Exception as e:  # LangChain/LangGraph/网络异常统一归一
             raise UpstreamLLMError(str(e)) from e
 
