@@ -210,4 +210,5 @@ python code.py
 ---
 
 ## 🙏 致谢
-- [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) 
+- [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code)
+- [lca-lc-foundations](https://github.com/langchain-ai/lca-lc-foundations?utm_source=chatgpt.com)
