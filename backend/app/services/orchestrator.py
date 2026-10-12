@@ -306,8 +306,8 @@ async def ask(session_id: str, text: Optional[str]) -> GameDTO:
         finally:
             session.pending_question = None
 
-        # 提问动作只可能产生 answer_question 推进；若意外进入终态
-        # （白名单下仅可能是 end_game(abort)），按放弃结算并释放会话
+        # 防御性保留：提问回合白名单只有 answer_question（纯推进工具），
+        # 正常不可能进入终态；若意外进入则按放弃结算并释放会话
         if session.status == GameStatus.RESULT:
             dto = to_dto(session, host_message=host_text or None)
             session_store.release(session.session_id)
@@ -319,7 +319,12 @@ async def ask(session_id: str, text: Optional[str]) -> GameDTO:
             and session.questions_used == used_before + 1
         )
         if not advanced:
-            # AI 未调用 answer_question：判定为非判断题，不计次
+            # AI 未调用 answer_question：不计次。host_text 为 None 说明本轮
+            # LLM 循环整体失败（如递归上限截断死循环），模型侧消息未回写，
+            # 将"玩家提问：X"一并撤回，与 LLM 故障路径对称；否则（模型正常
+            # 输出文本、要求澄清等）保留上下文。
+            if host_text is None and _last_entry_is_user_prompt(entry, "玩家提问："):
+                entry.messages.pop()
             raise ApiError(
                 ErrorCode.NOT_YES_NO_QUESTION,
                 host_text or NOT_YES_NO_FALLBACK,
@@ -379,7 +384,12 @@ async def guess(session_id: str, text: Optional[str]) -> GameDTO:
             and session.guesses_used == used_before + 1
         )
         if not advanced:
-            # AI 未调用 judge_guess（要求澄清等），状态不变、次数不扣
+            # AI 未调用 judge_guess：不计次。host_text 为 None 说明本轮 LLM
+            # 循环整体失败（如递归上限截断死循环），模型侧消息未回写，将
+            # "玩家猜测：X"一并撤回，与 LLM 故障路径对称；否则（模型正常
+            # 输出文本、要求澄清等）保留上下文。
+            if host_text is None and _last_entry_is_user_prompt(entry, "玩家猜测："):
+                entry.messages.pop()
             raise ApiError(
                 ErrorCode.INVALID_GUESS,
                 host_text or INVALID_GUESS_FALLBACK,

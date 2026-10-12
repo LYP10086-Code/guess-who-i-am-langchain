@@ -29,6 +29,12 @@ if _ENV_PATH.exists():
 # 与旧版一致的默认生成长度上限（langchain-anthropic v1 默认值有变化，显式锁定）
 DEFAULT_MAX_TOKENS = 2000
 
+# 显式锁定网络行为（此前依赖 SDK 隐式默认：timeout≈600s、max_retries=2）。
+# 上游挂起时会话锁会被长期持有，而前端 60s 即超时放弃，故单次模型调用的
+# 超时必须显著小于 60s；重试次数与 SDK 默认保持一致，仅从隐式改为显式。
+DEFAULT_TIMEOUT_SECONDS = float(os.getenv("GWI_LLM_TIMEOUT", "45"))
+DEFAULT_MAX_RETRIES = int(os.getenv("GWI_LLM_MAX_RETRIES", "2"))
+
 _VALID_PROVIDERS = ("anthropic", "openai", "deepseek")
 
 
@@ -54,6 +60,9 @@ def get_chat_model(*, max_tokens: int = DEFAULT_MAX_TOKENS):
             # DeepSeek 思考型模型：显式关闭 thinking，保证二元问答/工具调用稳定
             "extra_body": {"thinking": {"type": "disabled"}},
             "max_tokens": max_tokens,
+            # timeout 是 request_timeout 的 Pydantic 别名，三家通用
+            "timeout": DEFAULT_TIMEOUT_SECONDS,
+            "max_retries": DEFAULT_MAX_RETRIES,
         }
         api_key = os.getenv("DEEPSEEK_API_KEY")
         base_url = os.getenv("DEEPSEEK_BASE_URL")
@@ -64,7 +73,13 @@ def get_chat_model(*, max_tokens: int = DEFAULT_MAX_TOKENS):
         return init_chat_model(**kwargs)
 
     if provider == "openai":
-        kwargs = {"model": model, "model_provider": "openai", "max_tokens": max_tokens}
+        kwargs = {
+            "model": model,
+            "model_provider": "openai",
+            "max_tokens": max_tokens,
+            "timeout": DEFAULT_TIMEOUT_SECONDS,
+            "max_retries": DEFAULT_MAX_RETRIES,
+        }
         api_key = os.getenv("OPENAI_API_KEY")
         base_url = os.getenv("OPENAI_BASE_URL")
         if api_key:
@@ -79,7 +94,13 @@ def get_chat_model(*, max_tokens: int = DEFAULT_MAX_TOKENS):
         # 兼容国内 Anthropic 兼容端点（避免误用 SDK 旧 token 变量）
         os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
-    kwargs = {"model": model, "model_provider": "anthropic", "max_tokens": max_tokens}
+    kwargs = {
+        "model": model,
+        "model_provider": "anthropic",
+        "max_tokens": max_tokens,
+        "timeout": DEFAULT_TIMEOUT_SECONDS,
+        "max_retries": DEFAULT_MAX_RETRIES,
+    }
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if api_key:
         kwargs["anthropic_api_key"] = api_key

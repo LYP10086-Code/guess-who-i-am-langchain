@@ -38,7 +38,8 @@ def trigger_hooks(event: str, payload):
 
 # ---------- 内置 hook ----------
 
-_ABORT_KEYWORDS = {"q", "exit", "quit", "放弃", "中止", "结束"}
+# 放弃关键词（单一事实源；code.py 的启动横幅由此生成，保持提示与实现同步）
+ABORT_KEYWORDS = ("quit", "exit", "q", "放弃", "中止", "结束")
 
 
 def on_user_prompt_submit(query: str):
@@ -47,7 +48,7 @@ def on_user_prompt_submit(query: str):
     - 检测放弃意图 → 返回 'abort' 信号（由 REPL 处理）
     """
     text = query.strip().lower()
-    if text in _ABORT_KEYWORDS:
+    if text in ABORT_KEYWORDS:
         return "abort"
     return None
 

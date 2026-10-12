@@ -46,11 +46,12 @@ def _phase_whitelist(session) -> set[str]:
         return {"start_game"}
     if session.status == GameStatus.RESULT:
         return set()
-    # PLAYING：end_game(abort) 在提问/猜测阶段均允许
+    # PLAYING：放弃意图走显式入口（Web 放弃按钮 / CLI 关键词，均为纯本地
+    # 动作），模型不再持有任何不可逆工具；白名单只保留状态机推进工具
     if session.current_phase == Phase.QUESTION:
-        return {"answer_question", "end_game"}
+        return {"answer_question"}
     if session.current_phase == Phase.GUESS:
-        return {"judge_guess", "skip_guess", "end_game"}
+        return {"judge_guess", "skip_guess"}
     return set()
 
 
@@ -137,7 +138,7 @@ def handle_answer_question(answer: str, reasoning: str = "") -> str:
     except (InvalidPhaseError, GameNotActiveError) as e:
         return _err(str(e))
     except QuestionBudgetExhausted:
-        return _err("提问次数已用尽，请调用 end_game(lose) 揭晓答案")
+        return _err("提问次数已用尽，无法记录回答")
 
     return (
         f"{ans.value}。剩余提问次数：{s.questions_remaining}。"
@@ -155,7 +156,7 @@ def handle_judge_guess(is_correct: bool, guess_text: str, feedback: str = "") ->
     except (InvalidPhaseError, GameNotActiveError) as e:
         return _err(str(e))
     except GuessBudgetExhausted:
-        return _err("猜测次数已用尽，请调用 end_game(lose)")
+        return _err("猜测次数已用尽，无法记录猜测")
 
     if outcome is ResultType.WIN:
         return (
@@ -181,7 +182,7 @@ def handle_skip_guess(reason: str = "") -> str:
     except (InvalidPhaseError, GameNotActiveError) as e:
         return _err(str(e))
     except GuessBudgetExhausted:
-        return _err("猜测次数已用尽，请调用 end_game(lose)")
+        return _err("猜测次数已用尽，无法记录猜测")
 
     if outcome is ResultType.EXHAUSTED:
         return (
@@ -197,12 +198,13 @@ def handle_skip_guess(reason: str = "") -> str:
 def handle_end_game(outcome: str, reveal_message: str = "") -> str:
     s = get_session()
 
-    # 胜负只能由 judge_guess（末轮 skip_guess）产生，end_game 只允许 abort
+    # 胜负只能由 judge_guess（末轮 skip_guess）产生；end_game 已收敛为
+    # 系统保留工具（白名单任何阶段都不可达），仅存于 TOOL_HANDLERS 兼容层
     if outcome != "abort":
         return _err(
             f"end_game 不支持 outcome={outcome}：胜负判定只能调用 judge_guess"
             "（is_correct=true/false），10 轮用尽由系统自动判定；"
-            "玩家主动放弃时才调用 end_game(outcome=abort)。"
+            "玩家主动放弃由前端放弃按钮 / CLI 关键词处理，无需调用本工具。"
         )
 
     # 已终态：幂等返回揭晓信息
@@ -264,7 +266,7 @@ def skip_guess(reason: str = "") -> str:
 
 @tool("end_game")
 def end_game(outcome: Literal["abort"], reveal_message: str = "") -> str:
-    """仅用于玩家主动放弃（abort）时中止本局并揭晓答案。**不得**用于判定胜负：玩家猜对由 judge_guess(is_correct=true) 自动完成，10 轮用尽由 judge_guess/skip_guess 在末轮自动完成；调用 end_game(win/lose) 会被系统拒绝。"""
+    """系统保留工具：任何阶段调用都会被阶段白名单拒绝。玩家主动放弃由系统处理（Web 端放弃按钮 / CLI 输入放弃类关键词），无需也不应调用本工具；胜负判定只能调用 judge_guess，10 轮用尽由状态机自动完成。若玩家在对话中表达放弃意图，用文本礼貌引导其使用结束入口即可。"""
     return handle_end_game(outcome=outcome, reveal_message=reveal_message)
 
 
