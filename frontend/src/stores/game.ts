@@ -11,6 +11,30 @@ export const useGameStore = defineStore('game', () => {
   const error = ref<ApiError | null>(null)
   const toast = ref<string | null>(null)
 
+  // ---------- 会话持久化：刷新/重开标签页后凭 session_id 续玩 ----------
+  const STORAGE_KEY = 'gwi:session_id'
+
+  function persistSessionId(game: GameDTO | null) {
+    if (game && game.status !== 'result') {
+      localStorage.setItem(STORAGE_KEY, game.session_id)
+    } else {
+      localStorage.removeItem(STORAGE_KEY)
+    }
+  }
+
+  // store 首次创建时异步恢复：GET 成功则重建界面（终局快照仅展示、
+  // 不再续存），404 说明后端会话已过期，静默清掉本地记录回到开始页
+  void (async () => {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (!saved) return
+    try {
+      dto.value = await api.getGame(saved)
+      if (dto.value.status === 'result') localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      localStorage.removeItem(STORAGE_KEY)
+    }
+  })()
+
   // ---------- getters ----------
   const uiState = computed<GameStatus>(() => dto.value?.status ?? 'idle')
   const phase = computed<Phase | null>(() => dto.value?.phase ?? null)
@@ -43,6 +67,7 @@ export const useGameStore = defineStore('game', () => {
     try {
       const next = await action()
       dto.value = next
+      persistSessionId(next)
       return next
     } catch (e) {
       if (e instanceof ApiError) {
@@ -59,6 +84,7 @@ export const useGameStore = defineStore('game', () => {
             return dto.value
           case 'SESSION_NOT_FOUND':
             dto.value = null
+            localStorage.removeItem(STORAGE_KEY)
             showToast('会话已过期，请重新开始游戏。')
             return null
           case 'NOT_YES_NO_QUESTION':
