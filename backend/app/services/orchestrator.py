@@ -248,25 +248,29 @@ async def create_game(req: CreateGameRequest) -> GameDTO:
 
     entry = session_store.create(max_rounds=max_rounds, person_scope=scope)
     session = entry.session
-    # 开局注入最近人物排除区块；对局中的 ask/guess 不再携带（人物已选定）
-    system_prompt = build_system_prompt(
-        scope,
-        max_rounds,
-        exclusion_block=person_history.exclusion_block(scope),
-    )
+    try:
+        # 开局注入最近人物排除区块；对局中的 ask/guess 不再携带（人物已选定）
+        system_prompt = build_system_prompt(
+            scope,
+            max_rounds,
+            exclusion_block=person_history.exclusion_block(scope),
+        )
 
-    entry.messages.append(HumanMessage(content=(
-        f"请开始游戏，人物范围：{scope}。共 {max_rounds} 轮，每轮先提问后猜测。"
-    )))
+        entry.messages.append(HumanMessage(content=(
+            f"请开始游戏，人物范围：{scope}。共 {max_rounds} 轮，每轮先提问后猜测。"
+        )))
 
-    host_text = await _run_llm(entry, system_prompt)
+        host_text = await _run_llm(entry, system_prompt)
 
-    # 校验 AI 确实调用了 start_game
-    if session.status != GameStatus.PLAYING or not session.target_person:
+        # 校验 AI 确实调用了 start_game
+        if session.status != GameStatus.PLAYING or not session.target_person:
+            raise ApiError(ErrorCode.UPSTREAM_LLM_ERROR, "主持人未能完成开局，请重试。")
+
+        return to_dto(session, host_message=host_text or None)
+    except Exception:
+        # LLM 故障或状态校验失败：清掉孤儿条目，保证 create 失败后 session_store 无残留
         session_store.release(session.session_id)
-        raise ApiError(ErrorCode.UPSTREAM_LLM_ERROR, "主持人未能完成开局，请重试。")
-
-    return to_dto(session, host_message=host_text or None)
+        raise
 
 
 async def get_game(session_id: str) -> GameDTO:
